@@ -245,7 +245,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_main_menu(update, context)
 
 
-async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user or not update.message:
         return
