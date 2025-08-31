@@ -339,22 +339,18 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 # 🚀 ЗАПУСК
 # ==========================
 
-async def main() -> None:
-    if not BOT_TOKEN or BOT_TOKEN == "PASTE_YOUR_TOKEN_HERE":
-        raise RuntimeError("Укажи токен в константе BOT_TOKEN.")
-
+def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # === добавляем хендлеры ===
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("adminpanel", cmd_adminpanel))
-
     app.add_handler(CallbackQueryHandler(on_callback))
-
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    logger.info("Бот запущен. Нажми Ctrl+C для остановки.")
-    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+    print("Бот запущен. Нажми Ctrl+C для остановки.")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
