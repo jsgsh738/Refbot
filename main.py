@@ -1,9 +1,7 @@
-import asyncio
 import json
 import logging
-import os
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import Dict, Any, Set, List
 
 from telegram import (
@@ -23,22 +21,16 @@ from telegram.ext import (
 # ==========================
 # ⚙️ НАСТРОЙКИ
 # ==========================
-# Укажи токен бота прямо здесь (в коде)
+# Твой токен и админ-данные (как просил — прямо в коде)
 BOT_TOKEN = "8460442737:AAGCKd60R__tn2W83EdHpQ21Qah4nty1xj4"
-
-# Укажи себя как админа:
-# Предпочтительно ADMIN_ID (число). Узнать можно у @userinfobot
-# Либо ADMIN_USERNAME как запасной вариант.
-ADMIN_ID = 5083696616 # <-- Укажи свой числовой ID (узнать у @userinfobot), 0 = проверка по username  # 0 = не задан
-ADMIN_USERNAME = "Ma3stro274"  # <-- Твой @username без @
-
+ADMIN_ID = 5083696616                      # числовой ID (узнать у @userinfobot)
+ADMIN_USERNAME = "Ma3stro274"             # username без @
 
 # Директория и файлы данных
 DATA_DIR = Path("data")
 USERS_FILE = DATA_DIR / "users.json"
 STATE_FILE = DATA_DIR / "user_state.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
-STATS_FILE = DATA_DIR / "stats.json"
 STATS_FILE = DATA_DIR / "stats.json"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -49,7 +41,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("proxy-bot")
 
-# В памяти помечаем, что админ ждёт текст для рассылки
+# Флаг ожидания текста для рассылки у админа
 AWAITING_BROADCAST: Set[int] = set()
 
 # ==========================
@@ -64,16 +56,13 @@ def _read_json(path: Path, default: Any) -> Any:
             logger.exception("Ошибка чтения %s — использую default", path)
     return default
 
-
 def _write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
 
 # users.json: {"users": [id, id, ...]}
 def get_all_users() -> List[int]:
     data = _read_json(USERS_FILE, {"users": []})
     return [int(x) for x in data.get("users", [])]
-
 
 def add_user(user_id: int) -> None:
     users = set(get_all_users())
@@ -81,18 +70,15 @@ def add_user(user_id: int) -> None:
         users.add(user_id)
         _write_json(USERS_FILE, {"users": sorted(users)})
 
-
 # user_state.json: {"<uid>": {"started": bool}}
 def has_started(user_id: int) -> bool:
     data = _read_json(STATE_FILE, {})
     return str(user_id) in data and bool(data[str(user_id)].get("started", False))
 
-
 def set_started(user_id: int, value: bool) -> None:
     data = _read_json(STATE_FILE, {})
     data[str(user_id)] = {"started": value}
     _write_json(STATE_FILE, data)
-
 
 # settings.json: {"germany_enabled": true}
 def get_settings() -> Dict[str, Any]:
@@ -102,15 +88,40 @@ def get_settings() -> Dict[str, Any]:
         _write_json(SETTINGS_FILE, data)
     return data
 
-
 def update_settings(**kwargs) -> Dict[str, Any]:
     data = get_settings()
     data.update(kwargs)
     _write_json(SETTINGS_FILE, data)
     return data
 
+# ==========================
+# 📈 СТАТИСТИКА СООБЩЕНИЙ
+# ==========================
 
-# ==========================\n# 📈 СТАТИСТИКА СООБЩЕНИЙ\n# ==========================\n\n\ndef get_stats() -> Dict[str, Any]:\n    data = _read_json(STATS_FILE, {"messages": []})\n    if "messages" not in data:\n        data["messages"] = []\n    return data\n\n\ndef record_message(user_id: int) -> None:\n    st = get_stats()\n    now = int(time.time())\n    msgs = list(st.get("messages", []))\n    msgs.append(now)\n    cutoff = now - 3 * 86400  # храним последние ~3 суток\n    msgs = [t for t in msgs if t >= cutoff]\n    st["messages"] = msgs\n    _write_json(STATS_FILE, st)\n\n\ndef count_messages_last_24h() -> int:\n    st = get_stats()\n    now = int(time.time())\n    cutoff = now - 86400\n    return sum(1 for t in st.get("messages", []) if t >= cutoff)\n\n\n# ==========================\n# 🔐 ПРОВЕРКА АДМИНА
+def get_stats() -> Dict[str, Any]:
+    data = _read_json(STATS_FILE, {"messages": []})
+    if "messages" not in data:
+        data["messages"] = []
+    return data
+
+def record_message(_: int) -> None:
+    st = get_stats()
+    now = int(time.time())
+    msgs = list(st.get("messages", []))
+    msgs.append(now)
+    cutoff = now - 3 * 86400  # держим ~3 суток
+    msgs = [t for t in msgs if t >= cutoff]
+    st["messages"] = msgs
+    _write_json(STATS_FILE, st)
+
+def count_messages_last_24h() -> int:
+    st = get_stats()
+    now = int(time.time())
+    cutoff = now - 86400
+    return sum(1 for t in st.get("messages", []) if t >= cutoff)
+
+# ==========================
+# 🔐 ПРОВЕРКА АДМИНА
 # ==========================
 
 def is_admin(update: Update) -> bool:
@@ -123,7 +134,6 @@ def is_admin(update: Update) -> bool:
         return user.username.lower() == ADMIN_USERNAME.lower()
     return False
 
-
 # ==========================
 # 🧩 РАЗМЕТКА КНОПОК
 # ==========================
@@ -133,7 +143,6 @@ def kb_main_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🛍 Магазин прокси", callback_data="shop")],
     ])
 
-
 def kb_shop_menu(germany_enabled: bool) -> InlineKeyboardMarkup:
     rows = []
     if germany_enabled:
@@ -141,13 +150,11 @@ def kb_shop_menu(germany_enabled: bool) -> InlineKeyboardMarkup:
     rows.append([InlineKeyboardButton("◀️ Назад", callback_data="back_main")])
     return InlineKeyboardMarkup(rows)
 
-
 def kb_germany() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✉️ Написать админу", url=f"https://t.me/{ADMIN_USERNAME}")],
         [InlineKeyboardButton("◀️ Назад", callback_data="back_shop")],
     ])
-
 
 def kb_admin_panel(settings: Dict[str, Any]) -> InlineKeyboardMarkup:
     label = "Скрыть категорию 'Германия'" if settings.get("germany_enabled", True) else "Показать категорию 'Германия'"
@@ -157,10 +164,8 @@ def kb_admin_panel(settings: Dict[str, Any]) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("◀️ Назад", callback_data="back_main")],
     ])
 
-
 def kb_back_to_admin() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="back_admin")]])
-
 
 # ==========================
 # 📨 СООБЩЕНИЯ-ЭКРАНЫ
@@ -173,7 +178,6 @@ async def send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, *, 
     else:
         await update.effective_chat.send_message(text, reply_markup=kb_main_menu())
 
-
 async def send_shop(update: Update, context: ContextTypes.DEFAULT_TYPE, *, edit: bool = False) -> None:
     settings = get_settings()
     germany_enabled = settings.get("germany_enabled", True)
@@ -182,7 +186,6 @@ async def send_shop(update: Update, context: ContextTypes.DEFAULT_TYPE, *, edit:
         await update.callback_query.message.edit_text(text, reply_markup=kb_shop_menu(germany_enabled))
     else:
         await update.effective_chat.send_message(text, reply_markup=kb_shop_menu(germany_enabled))
-
 
 async def send_germany(update: Update, context: ContextTypes.DEFAULT_TYPE, *, edit: bool = False) -> None:
     text = (
@@ -193,7 +196,6 @@ async def send_germany(update: Update, context: ContextTypes.DEFAULT_TYPE, *, ed
         await update.callback_query.message.edit_text(text, reply_markup=kb_germany(), disable_web_page_preview=True)
     else:
         await update.effective_chat.send_message(text, reply_markup=kb_germany(), disable_web_page_preview=True)
-
 
 async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE, *, edit: bool = False) -> None:
     settings = get_settings()
@@ -220,39 +222,29 @@ async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE, *
     else:
         await update.effective_chat.send_message(text, reply_markup=markup)
 
-
 # ==========================
-# 🧠 ХЕНДЛЕРЫ КОМАНД/СООБЩЕНИЙ
+# 🧠 ХЕНДЛЕРЫ
 # ==========================
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user:
         return
-
     add_user(user.id)
-    # учитываем /start как сообщение в статистике
-    record_message(user.id)
-
-    if has_started(user.id):
-        await send_main_menu(update, context)
-        return
-
-    # Первый визит: используем нативную синюю кнопку Telegram (управляется самим Telegram и появляется до первого сообщения).
-    # Здесь просто отмечаем запуск и показываем меню.
-    set_started(user.id, True)
-    await update.effective_chat.send_message("👋 Добро пожаловать! Бот запущен.")
+    record_message(user.id)  # считаем /start как сообщение
+    if not has_started(user.id):
+        set_started(user.id, True)
+        await update.effective_chat.send_message("👋 Добро пожаловать! Бот запущен.")
     await send_main_menu(update, context)
-
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user or not update.message:
         return
-
     add_user(user.id)
+    record_message(user.id)
 
-    # Режим рассылки для админа — отправляем текст как есть всем пользователям
+    # Режим рассылки: админ ввёл текст после нажатия "Рассылка"
     if user.id in AWAITING_BROADCAST and is_admin(update):
         text = update.message.text or ""
         AWAITING_BROADCAST.discard(user.id)
@@ -260,11 +252,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         sent, errors = 0, 0
         for uid in get_all_users():
             try:
-                if uid == user.id:
-                    # Чтобы админ тоже видел итоговое сообщение
-                    await context.bot.send_message(chat_id=uid, text=text)
-                else:
-                    await context.bot.send_message(chat_id=uid, text=text)
+                await context.bot.send_message(chat_id=uid, text=text)
                 sent += 1
             except Exception as e:
                 logger.warning("Не удалось отправить пользователю %s: %s", uid, e)
@@ -272,24 +260,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_chat.send_message(f"✅ Готово. Доставлено: {sent}, ошибок: {errors}.")
         return
 
-    # Первый клик по кнопке Start
-    msg = (update.message.text or "").strip()
-    if msg == START_BUTTON_TEXT and not has_started(user.id):
-        set_started(user.id, True)
-        await update.message.reply_text("✅ Бот запущен", reply_markup=ReplyKeyboardRemove())
-        await send_main_menu(update, context)
-        return
-
-    # Любые другие сообщения
+    # Прочие сообщения
     await update.message.reply_text("👉 Выберите действие из меню ниже.")
-
 
 async def cmd_adminpanel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_admin(update):
         await update.effective_chat.send_message("⛔ Доступ запрещён.")
         return
     await send_admin_panel(update, context)
-
 
 # ==========================
 # 🔘 CALLBACKS (ИНЛАЙН-КНОПКИ)
@@ -300,8 +278,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not query:
         return
     await query.answer()
-
-    data = query.data or ""
+    data = (query.data or "").strip()
 
     if data == "shop":
         await send_shop(update, context, edit=True)
@@ -328,12 +305,33 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if data == "admin_toggle_de":
         if not is_admin(update):
-            await query.edit_message_text(
+            await query.edit_message_text("⛔ Доступ запрещён.")
+            return
+        settings = get_settings()
+        new_val = not settings.get("germany_enabled", True)
+        update_settings(germany_enabled=new_val)
+        await send_admin_panel(update, context, edit=True)
+        return
+
+    if data == "admin_broadcast":
+        if not is_admin(update):
+            await query.edit_message_text("⛔ Доступ запрещён.")
+            return
+        user = update.effective_user
+        if user:
+            AWAITING_BROADCAST.add(user.id)
+        await query.edit_message_text(
             "📝 Введите текст рассылки одним сообщением.\nБез лишней воды — будет отправлено как есть.",
             reply_markup=kb_back_to_admin(),
         )
         return
 
+# ==========================
+# 🧯 ОБРАБОТКА ОШИБОК
+# ==========================
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.exception("Ошибка в обработке апдейта: %s", context.error)
 
 # ==========================
 # 🚀 ЗАПУСК
@@ -342,15 +340,17 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # === добавляем хендлеры ===
+    # Хендлеры
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("adminpanel", cmd_adminpanel))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
+    # Ошибки в лог
+    app.add_error_handler(error_handler)
+
     print("Бот запущен. Нажми Ctrl+C для остановки.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 if __name__ == "__main__":
     main()
